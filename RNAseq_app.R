@@ -46,6 +46,7 @@ ui<-fluidPage(
         sidebarPanel(
           #file input only accepts csv and tsv files, wont let you submit other types of files
           fileInput('file1',p('LOAD COUNTS MATRIX',style='color:white; text-align:center'),accept=c('.csv','.tsv')),
+          fileInput('meta1',p('LOAD METADATA',style='color:white; text-align:center'),accept=c('.csv','.tsv')),
           #these conditional panels will only output the UI inside if a certain tab is selected
           conditionalPanel(condition="input.mt=='SUMMARY'",
             h2('Summary Table',style='color:white; text-align:center'),
@@ -72,6 +73,7 @@ ui<-fluidPage(
         sidebarPanel(
           #File inputs will be on every analysis page, but the data also carries throughout the app
           fileInput('file2',p('LOAD COUNTS MATRIX',style='color:white; text-align:center'),accept=c('.csv','.tsv')),
+          fileInput('meta2',p('LOAD METADATA',style='color:white; text-align:center'),accept=c('.csv','.tsv')),
           #more conditional description panels
           conditionalPanel(condition="input.ct=='FILTER INFO'",
             h2('Filter Statistics',style='color:white; text-align:center'),
@@ -172,6 +174,7 @@ ui<-fluidPage(
       sidebarLayout(
         sidebarPanel(
           fileInput('file3',p('LOAD COUNTS MATRIX',style='color:white; text-align:center'),accept=c('.csv','.tsv')),
+          fileInput('meta3',p('LOAD METADATA',style='color:white; text-align:center'),accept=c('.csv','.tsv')),
           conditionalPanel(condition="input.det=='RESULTS'",
             h2('Results Table',style='color:white; text-align:center'),
             p('A sortable and searchable table containing the results of a differential expression analysis performed on the given
@@ -182,6 +185,9 @@ ui<-fluidPage(
             p('A custom scatter plot of two result statistics, with color customization for genes that pass a specified adjusted
               p-value threshold')
                           ),
+          #DESEQ arguments - - - - - -
+          #selectizeInput('',p('CHOOSE A VARIABLE',style='color:white; text-align:center'),choices=colnames(meta1)),
+         # selectizeInput('cat',p('CHOOSE A VARIABLE',style='color:white; text-align:center'),choices=colnames(meta1))
                     ),
         mainPanel(
           tabsetPanel(id='det',
@@ -220,6 +226,7 @@ ui<-fluidPage(
       sidebarLayout(
        sidebarPanel(
         fileInput('file4',p('LOAD COUNTS MATRIX',style='color:white; text-align:center'),accept=c('.csv','.tsv')),
+        fileInput('meta4',p('LOAD METADATA',style='color:white; text-align:center'),accept=c('.csv','.tsv')),
         h2('Individual Gene Analysis',style='color:white; text-align:center'),
         p('A custom plot of normalized counts for a chosen gene, split by a chosen metadata variable'),
         #all of the UI here will only show up after a file has been uploaded
@@ -274,7 +281,7 @@ server<-function(input,output,session){
   
   #DESeq2 function
   run_deseq <- function(count_dataframe) {
-    meta<-metainfo(count_dataframe)
+    meta<-meta_data()
     meta$timepoint<-factor(meta$timepoint)
     meta$timepoint<-relevel(meta$timepoint, ref = "P0")
     rcounts<-data.frame(count_dataframe) %>% dplyr::select(starts_with(c('vP0', 'vAd')))
@@ -287,6 +294,26 @@ server<-function(input,output,session){
   }
   
   #REACTIVES - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  
+  meta_data <- reactive({
+    req(isTruthy(input$meta1) || isTruthy(input$meta2) || isTruthy(input$meta3) || isTruthy(input$meta4))
+    if (isTruthy(input$meta1)){
+      f<-read_delim(input$meta1$datapath)
+      return(f)
+    }
+    if (isTruthy(input$meta2)){
+      f<-read_delim(input$meta2$datapath)
+      return(f)
+    }
+    if (isTruthy(inputmeta3)){
+      f<-read_delim(input$meta3$datapath)
+      return(f)
+    }
+    if (isTruthy(input$meta4)){
+      f<-read_delim(input$meta4$datapath)
+      return(f)
+    }
+  })
   
   #Load data
   load_data <- reactive({
@@ -393,31 +420,31 @@ server<-function(input,output,session){
   #METADATA TAB - - - - - - - - - - - - -
   
   #function to create metadata table from sample names in counts matrix
-  metainfo <- function(counts) {
-    sample_names<-colnames(counts)
-    data.frame(sample=sample_names)%>%
-  mutate(
-        timepoint=substr(sample,2,3),
-        replicate=substr(sample,5,5)
-      )
-  }
+#  metainfo <- function(counts) {
+#    sample_names<-colnames(counts)
+#    data.frame(sample=sample_names)%>%
+#  mutate(
+#        timepoint=substr(sample,2,3),
+#        replicate=substr(sample,5,5)
+#      )
+#  }
   
   #outputs the summary of the metadata table created in the metainfo() function
   output$meta<- renderTable({
-  data<-load_data()[,-1]
-   metadata<-metainfo(data)
-   me<-tibble('Column'=colnames(metadata), 'Type'=c(class(metadata$sample),class(metadata$timepoint),class(metadata$replicate)),
-          'Distinct Values'=c(paste(unique(metadata$sample),collapse=', '),
-                              paste(unique(metadata$timepoint),collapse=', '),
-                              paste(unique(metadata$replicate),collapse=', ')))
+   metadata<-meta_data()
+   me<-tibble('Column'=colnames(metadata), 'Type'=lapply(metadata,class))#,
+            #  'Distinct Values'=lapply(metadata,function(x){paste(unique(x),collapse=', ')}))
+   #########
+   me<-mutate(me, 'Distinct Values/Mean (SD)'= case_when(Type!='numeric' ~ paste(unique(metadata$Column),collapse=', '),
+                                                       Type=='numeric' ~ paste0(mean(metadata$Column), '(',sd(metadata$Column),')')))
+   #########
    return(me)
    #I add this to add some minor styling to the UI table
   },width = "100%",bordered=TRUE,hover=TRUE)
   
   #Output interactive metadata table using DT
   output$si<-DT::renderDataTable({
-    data<-load_data()[,-1]
-  metadata<-metainfo(data)
+  metadata<-meta_data()
   DT::datatable(metadata, class='table-light',style='bootstrap5', rownames = FALSE,
                 options = list(paging = FALSE, searching = TRUE,
                                fixedColumns = TRUE, autoWidth = TRUE,
@@ -599,7 +626,7 @@ server<-function(input,output,session){
   #Output UI for choosing which variable to graph
   output$info<-renderUI({
   req(isTruthy(input$file1) || isTruthy(input$file2) || isTruthy(input$file3) || isTruthy(input$file4))
-  meta1<-metainfo(filtered())
+  meta1<-meta_data()
   return(selectizeInput('cat',p('CHOOSE A VARIABLE',style='color:white; text-align:center'),choices=colnames(meta1)))
   })
 
@@ -626,7 +653,7 @@ server<-function(input,output,session){
     input$button2
     isolate({
     td<-data.frame(t(filtered()))%>%rownames_to_column(var='sample')
-    met<-metainfo(filtered())
+    met<-meta_data()
     #combine the metadata and counts data, then pivots longer to make it graphable
     comb<-left_join(met,td,by=c('sample'='sample'))
     #conditionals based on the type of graph chosen
