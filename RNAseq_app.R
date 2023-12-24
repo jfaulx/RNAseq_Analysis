@@ -21,6 +21,9 @@ library(tibble)
 library(readr)
 library(gplots)
 library(shinyjs)
+library(rsconnect)
+
+#rsconnect::setAccountInfo(name='jacksonfaulx', token='FD34BE13AC12C9A308F259D7C7F2805E', secret='CTpZrUdt+UmyPl7kr1IbL2qEQirrdXoiczoYMmGK')
 
 css<-'#gc+div div a {color: black;}'
 ui<-fluidPage(
@@ -186,8 +189,7 @@ ui<-fluidPage(
               p-value threshold')
                           ),
           #DESEQ arguments - - - - - -
-          #selectizeInput('',p('CHOOSE A VARIABLE',style='color:white; text-align:center'),choices=colnames(meta1)),
-         # selectizeInput('cat',p('CHOOSE A VARIABLE',style='color:white; text-align:center'),choices=colnames(meta1))
+          textInput('des',p('ENTER A DESIGN',value='~timepoint',placeholder='ex. timepoint + batch',style='color:white; text-align:center')),
                     ),
         mainPanel(
           tabsetPanel(id='det',
@@ -281,15 +283,24 @@ server<-function(input,output,session){
   
   #DESeq2 function
   run_deseq <- function(count_dataframe) {
+    #####
     meta<-meta_data()
-    meta$timepoint<-factor(meta$timepoint)
-    meta$timepoint<-relevel(meta$timepoint, ref = "P0")
-    rcounts<-data.frame(count_dataframe) %>% dplyr::select(starts_with(c('vP0', 'vAd')))
-    metac<-data.frame(as_tibble(meta) %>% dplyr::select(sample,timepoint)%>%
-                        filter(timepoint %in% c('P0', 'Ad')))
-    dds <- DESeqDataSetFromMatrix(rcounts,colData=metac,design=~timepoint) 
+    dds <- DESeqDataSetFromMatrix(count_dataframe,colData=meta,design=as.formula(input$des)) 
     dds <- DESeq(dds)
-    res <- results(dds)
+    res <- results(dds, contrast=c('timepoint','Ad','P0'))
+    
+    # Add choices for contrast using selectize inputs 
+    #####
+    
+  #  meta<-meta_data()
+  #  meta$timepoint<-factor(meta$timepoint)
+  #  meta$timepoint<-relevel(meta$timepoint, ref = "P0")
+  #  rcounts<-data.frame(count_dataframe) %>% dplyr::select(starts_with(c('vP0', 'vAd')))
+  #  metac<-data.frame(as_tibble(meta) %>% dplyr::select(sample,timepoint)%>%
+  #                      filter(timepoint %in% c('P0', 'Ad')))
+  #  dds <- DESeqDataSetFromMatrix(rcounts,colData=metac,design=~timepoint) 
+  #  dds <- DESeq(dds)
+  #  res <- results(dds)
     return(res)
   }
   
@@ -305,7 +316,7 @@ server<-function(input,output,session){
       f<-read_delim(input$meta2$datapath)
       return(f)
     }
-    if (isTruthy(inputmeta3)){
+    if (isTruthy(input$meta3)){
       f<-read_delim(input$meta3$datapath)
       return(f)
     }
