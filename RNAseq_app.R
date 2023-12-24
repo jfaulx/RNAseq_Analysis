@@ -190,6 +190,9 @@ ui<-fluidPage(
                           ),
           #DESEQ arguments - - - - - -
           textInput('des',p('ENTER A DESIGN',value='~timepoint',placeholder='ex. timepoint + batch',style='color:white; text-align:center')),
+          withSpinner(uiOutput('con'),type=8,color='white'),
+          withSpinner(uiOutput('vs'),type=8,color='white'),
+          actionButton('butt','RUN DESEQ2',width='100%',class='btn-primary')
                     ),
         mainPanel(
           tabsetPanel(id='det',
@@ -283,24 +286,10 @@ server<-function(input,output,session){
   
   #DESeq2 function
   run_deseq <- function(count_dataframe) {
-    #####
     meta<-meta_data()
     dds <- DESeqDataSetFromMatrix(count_dataframe,colData=meta,design=as.formula(input$des)) 
     dds <- DESeq(dds)
-    res <- results(dds, contrast=c('timepoint','Ad','P0'))
-    
-    # Add choices for contrast using selectize inputs 
-    #####
-    
-  #  meta<-meta_data()
-  #  meta$timepoint<-factor(meta$timepoint)
-  #  meta$timepoint<-relevel(meta$timepoint, ref = "P0")
-  #  rcounts<-data.frame(count_dataframe) %>% dplyr::select(starts_with(c('vP0', 'vAd')))
-  #  metac<-data.frame(as_tibble(meta) %>% dplyr::select(sample,timepoint)%>%
-  #                      filter(timepoint %in% c('P0', 'Ad')))
-  #  dds <- DESeqDataSetFromMatrix(rcounts,colData=metac,design=~timepoint) 
-  #  dds <- DESeq(dds)
-  #  res <- results(dds)
+    res <- results(dds, contrast=c(input$contrast,input$num1,input$num2))
     return(res)
   }
   
@@ -429,16 +418,6 @@ server<-function(input,output,session){
   })
   
   #METADATA TAB - - - - - - - - - - - - -
-  
-  #function to create metadata table from sample names in counts matrix
-#  metainfo <- function(counts) {
-#    sample_names<-colnames(counts)
-#    data.frame(sample=sample_names)%>%
-#  mutate(
-#        timepoint=substr(sample,2,3),
-#        replicate=substr(sample,5,5)
-#      )
-#  }
   
   #outputs the summary of the metadata table created in the metainfo() function
   output$meta<- renderTable({
@@ -593,6 +572,20 @@ server<-function(input,output,session){
   
 #DIFFERENTIAL EXPRESSION TAB - - - - - - - - - - - - - - - - - - - - - - - - - -
   
+  output$con<-renderUI({
+    req(isTruthy(input$meta1) || isTruthy(input$meta2) || isTruthy(input$meta3) || isTruthy(input$meta4))
+    selectInput('contrast',p('SELECT CONTRAST',style='color:white; text-align:center'),choices=colnames(meta_data()))
+  })
+  
+  output$vs<-renderUI({
+    req(isTruthy(input$meta1) || isTruthy(input$meta2) || isTruthy(input$meta3) || isTruthy(input$meta4))
+    fluidRow(
+     column(4, selectInput('num1','',choices=unique(meta_data()[input$contrast]))),
+     column(4, p('VS',style='color:white; text-align:center')),
+     column(4, selectInput('num2','',choices=unique(meta_data()[input$contrast])))
+     )
+  })
+  
   #function for creating a volcano plot
   volcano_plot <-function(dataf, x_name, y_name, slider, color1, color2) {
     #If statement will only transform the y-axis to log10 if 'padj' is the y-axis variable
@@ -613,11 +606,14 @@ server<-function(input,output,session){
   
   #Output interactive DESeq2 results datatable 
   output$detab<-DT::renderDataTable({
+    input$butt
+    isolate({
     des<-data.frame(DE())%>%rownames_to_column(var='gene')
     DT::datatable(des, class='table-light',style='bootstrap5', width='auto', rownames=FALSE,
                   options = list(paging = TRUE, searching = TRUE, scrollX=TRUE,
                                  fixedColumns = TRUE, autoWidth = TRUE,
                                  ordering = TRUE, dom = 'Bfrtip'))
+      })
  
      })
   #Output for volcano plot 
