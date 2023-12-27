@@ -599,6 +599,9 @@ server<-function(input,output,session){
       geom_vline(xintercept = -slider, linetype="dashed", color='white')+
       geom_vline(xintercept = slider, linetype="dashed", color='white')+
       scale_y_reverse()
+      ###
+      #geom_point(aes(x=dataf$log2FoldChange,y=log10(dataf$padj),color=(dataf$gene=='ENSMUSG00000051951.6')==TRUE))
+      ###
     return(vp)
  }
   
