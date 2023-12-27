@@ -165,7 +165,11 @@ ui<-fluidPage(
                         ),
                 column(width=4, 
                   uiOutput('pcs1')
-      
+                        )
+                      ),
+              fluidRow(
+                column(width=6, offset=1,
+                  uiOutput('pcgroup')
                         )
                       )
                     )
@@ -189,7 +193,7 @@ ui<-fluidPage(
               p-value threshold')
                           ),
           #DESEQ arguments - - - - - -
-          textInput('des',p('ENTER A DESIGN',value='~timepoint',placeholder='ex. timepoint + batch',style='color:white; text-align:center')),
+          textInput('des',p('ENTER A DESIGN',style='color:white; text-align:center'),value='~timepoint',placeholder='ex. ~timepoint + batch',),
           withSpinner(uiOutput('con'),type=8,color='white'),
           withSpinner(uiOutput('vs'),type=8,color='white'),
           actionButton('butt','RUN DESEQ2',width='100%',class='btn-primary')
@@ -202,13 +206,6 @@ ui<-fluidPage(
             tabPanel('VOLCANO PLOT',
               sidebarLayout(
                 sidebarPanel(
-                  #I use radio buttons with a pre selected option
-                  #radioButtons('radx',p('CHOOSE STATISTIC FOR THE X-AXIS',style='color:white; text-align:center'),
-                             ## c('baseMean','log2FoldChange','lfcSE','stat','pvalue','padj'),
-                              #  selected='log2FoldChange'),
-                  #radioButtons('rady',p('CHOOSE STATISTIC FOR THE Y-AXIS',style='color:white; text-align:center'),
-                             # c('baseMean','log2FoldChange','lfcSE','stat','pvalue','padj'),
-                                #selected='padj'),
                   #color picker allows customization of the colors on the graph
                   colourpicker::colourInput('color1',p('BASE POINT COLOR',style='color:white; text-align:center'),value='#860038'),
                   colourpicker::colourInput('color2',p('HIGHLIGHT POINT COLOR',style='color:white; text-align:center'),value='#FDBB30'),
@@ -513,7 +510,7 @@ server<-function(input,output,session){
     heatmap.2(int_matrix,col = pal,density.info='none',scale='none',trace='none',keysize=1,key.xlab='Log10 Read Counts')
   })
   
-  #Output PCA plot
+  #Output PCA plot - - - - - - - - - -  make compatible
   #runs PCA, then principal components are used for graphing
   output$pca<- renderPlot({
     req(isTruthy(input$file1) || isTruthy(input$file2) || isTruthy(input$file3) || isTruthy(input$file4))
@@ -524,11 +521,13 @@ server<-function(input,output,session){
                     Variance=pca$sdev**2,vex=Variance/sum(Variance)*100)
     xv<-as.integer(str_sub(input$PCX,start=3))
     yv<-as.integer(str_sub(input$PCY,start=3))
-    t<-as_tibble(pca$x)%>%mutate(timepoint=str_sub(rownames(pca$x),2,3))
-    ggplot(t,aes(x=!!sym(input$PCX),y=!!sym(input$PCY),color=timepoint))+
-      #labs show the percent variance for each PC being graphed
+   # val<-as.character(meta_data()[input$GB])
+    t<-as_tibble(pca$x)%>%mutate(cat=as.character(meta_data()[[input$GB]]))
+    ggplot(t,aes(x=!!sym(input$PCX),y=!!sym(input$PCY),color=cat))+
+      #labelss show the percent variance for each PC being graphed
       geom_point()+labs(title='PCA',x=paste0(input$PCX,' ',as.character(round(pca_var$vex[xv])),'% variance'),
-                                   y=paste0(input$PCY,' ',as.character(round(pca_var$vex[yv])),'% variance'))+
+                                   y=paste0(input$PCY,' ',as.character(round(pca_var$vex[yv])),'% variance'),
+                        color=input$GB)+
       theme(plot.title=element_text(hjust=0.5))
   })
   
@@ -567,6 +566,11 @@ server<-function(input,output,session){
   output$pcy<- renderUI({
     if (!is.null(load_data())){
       selectizeInput('PCY',label='PC Y',choices=str_c("PC",1:8),selected='PC2',width='50%')
+    }
+  })
+  output$pcgroup<- renderUI({
+    if (!is.null(load_data()) & !is.null(meta_data())){
+      selectInput('GB',label='GROUP BY',choices=colnames(meta_data()),width='50%')
     }
   })
   
