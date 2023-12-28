@@ -207,16 +207,23 @@ ui<-fluidPage(
               sidebarLayout(
                 sidebarPanel(
                   #color picker allows customization of the colors on the graph
-                  colourpicker::colourInput('color1',p('BASE POINT COLOR',style='color:white; text-align:center'),value='#860038'),
-                  colourpicker::colourInput('color2',p('HIGHLIGHT POINT COLOR',style='color:white; text-align:center'),value='#FDBB30'),
+                  colourpicker::colourInput('color1',p('FAILING COLOR',style='color:white; text-align:center'),value='#860038'),
+                  colourpicker::colourInput('color2',p('PASSING COLOR',style='color:white; text-align:center'),value='#FDBB30'),
+                  colourpicker::colourInput('color3',p('HIGHLIGHT COLOR',style='color:white; text-align:center'),value='white'),
                   sliderInput('slider',min=0,max=15,
                               label=p('SELECT THE LOG2 FOLD CHANGE THRESHOLD',style='color:white; text-align:center'),
-                              value=2,step=0.1),
+                              value=2,step=0.1)
                   #all inputs should wait to process until the action button is activated
-                  actionButton('button','Plot',width='100%',class='btn-primary')
+                  #actionButton('button','Plot',width='100%',class='btn-primary')
                              ),
                 mainPanel(
-                  withSpinner(plotOutput('volcano'),type=8,color='white')
+                  withSpinner(plotOutput('volcano'),type=8,color='white'),
+                  br(),
+                  fluidRow(
+                    column(width=6,offset=3,
+                      withSpinner(uiOutput('topg'),type=8,color='white')
+                                )
+                              )
                             )
                           )     
                         )
@@ -591,17 +598,17 @@ server<-function(input,output,session){
   })
   
   #function for creating a volcano plot
-  volcano_plot <-function(dataf, slider, color1, color2) {
+  volcano_plot <-function(dataf, slider, color1, color2, color3) {
+    filt<-dataf%>%rownames_to_column(var='gene')%>%filter(gene==input$tg)
     vp<-ggplot(dataf)+geom_point(aes(x=dataf$log2FoldChange,y=log10(dataf$padj),color=abs(dataf$log2FoldChange)>slider,fill=NA))+
       scale_color_manual(values=c('FALSE'=color1,'TRUE'=color2))+
       labs(title='Volcano Plot',x='Log2 Fold Change',y='P-Adjusted',color=paste('Log2FC >',slider))+
       theme(plot.title=element_text(hjust=0.5))+
       geom_vline(xintercept = -slider, linetype="dashed", color='white')+
       geom_vline(xintercept = slider, linetype="dashed", color='white')+
-      scale_y_reverse()
-      ###
-      #geom_point(aes(x=dataf$log2FoldChange,y=log10(dataf$padj),color=(dataf$gene=='ENSMUSG00000051951.6')==TRUE))
-      ###
+      scale_y_reverse()+
+      geom_point(data=filt,mapping=aes(x=filt$log2FoldChange,y=log10(filt$padj)),
+                 pch=21, fill=NA, size=4, color=color3, stroke=1)
     return(vp)
  }
   
@@ -622,14 +629,23 @@ server<-function(input,output,session){
      })
   #Output for volcano plot 
   output$volcano <- renderPlot({
-    input$button
+    #input$button
     #Isolate function makes it so that the code will not run until the button is clicked
-    isolate({
-      volcano_plot(DE(),input$slider,input$color1,input$color2)
-    })
+    #isolate({
+      volcano_plot(DE(),input$slider,input$color1,input$color2, input$color3)
+    #})
   })
   
-
+  best<-function(dat){
+    ret<-data.frame(dat)%>%rownames_to_column(var='gene')
+    ret<-ret%>%filter(abs(log2FoldChange)>input$slider)
+    return(ret[order(ret$padj),])
+  }
+  
+  output$topg<-renderUI({
+    bd<-head(best(DE()),10)
+    return(radioButtons('tg',p('TOP 10 DIFFERENTIALLY EXPRESSED GENES',style='color:white; text-align:center'),choices=bd$gene))
+  })
 
 
 #INDIVIDUAL GENE EXPRESSION TAB - - - - - - - - - - - - - - - - - - - - - - - - -
