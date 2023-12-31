@@ -1,5 +1,7 @@
 # Welcome! 
 ## This is an RShiny app that I created to help analyze and visualize trends in RNA sequencing data.
+
+Features include metadata summary, count data filtering and visualization, differential expression via DESeq2, and individual gene expression analysis
  
 You can find the app hosted here: https://jacksonfaulx.shinyapps.io/rnaseqapp/ 
 
