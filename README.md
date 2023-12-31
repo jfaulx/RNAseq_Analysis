@@ -13,7 +13,7 @@ Counts file: Needs to have gene IDs as row names and samples as columns, counts 
 ![image](https://github.com/jfaulx/RNAseq_Analysis/assets/143756015/01ffb169-b3eb-43b3-93fa-6e0eb6043864)
 
 
-Meta data: Should have columns containing sample information
+Meta data: Should have columns containing sample information, first column must be called 'sample' and contain all sample names
 
 ![image](https://github.com/jfaulx/RNAseq_Analysis/assets/143756015/736e8579-8148-4e07-a691-6aa108e5b155)
 
