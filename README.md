@@ -1,4 +1,5 @@
-# Welcome! This is an RShiny app that I created to help analyze and visualize trends in RNA sequencing data.
+# Welcome! 
+## This is an RShiny app that I created to help analyze and visualize trends in RNA sequencing data.
  
 You can find the app hosted here: https://jacksonfaulx.shinyapps.io/rnaseqapp/ 
 
