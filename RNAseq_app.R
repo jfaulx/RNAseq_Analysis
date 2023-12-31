@@ -23,8 +23,6 @@ library(gplots)
 library(shinyjs)
 library(rsconnect)
 
-#rsconnect::setAccountInfo(name='jacksonfaulx', token='FD34BE13AC12C9A308F259D7C7F2805E', secret='CTpZrUdt+UmyPl7kr1IbL2qEQirrdXoiczoYMmGK')
-
 css<-'#gc+div div a {color: black;}'
 ui<-fluidPage(
   #bslib package allows me to use a theme from Bootswatch v5 and allows for further customization
@@ -43,7 +41,7 @@ ui<-fluidPage(
              .navbar-header {padding-top:1rem; padding-bottom:0rem}
              .navbar-nav {display: flex !important;justify-content: center !important;width: 100%;}"),
   #I use a navbar instead of nested tabs, since it looks a bit cleaner
-  navbarPage(div(h3('Final Project'),h5('Jackson Faulx',style='color:#999; text-align:center; font-size: 16px')),
+  navbarPage(div(h3('RNA-seq Analysis'),h5('Jackson Faulx',style='color:#999; text-align:center; font-size: 16px')),
     tabPanel('Samples',
       sidebarLayout(
         sidebarPanel(
@@ -192,7 +190,6 @@ ui<-fluidPage(
             p('A custom scatter plot of two result statistics, with color customization for genes that pass a specified adjusted
               p-value threshold')
                           ),
-          #DESEQ arguments - - - - - -
           textInput('des',p('ENTER A DESIGN',style='color:white; text-align:center'),value='~timepoint',placeholder='ex. ~timepoint + batch',),
           withSpinner(uiOutput('con'),type=8,color='white'),
           withSpinner(uiOutput('vs'),type=8,color='white'),
@@ -213,8 +210,6 @@ ui<-fluidPage(
                   sliderInput('slider',min=0,max=15,
                               label=p('SELECT THE LOG2 FOLD CHANGE THRESHOLD',style='color:white; text-align:center'),
                               value=2,step=0.1)
-                  #all inputs should wait to process until the action button is activated
-                  #actionButton('button','Plot',width='100%',class='btn-primary')
                              ),
                 mainPanel(
                   withSpinner(plotOutput('volcano'),type=8,color='white'),
@@ -258,7 +253,7 @@ server<-function(input,output,session){
   #thematic_shiny() styles plots in accordance with the selected 'lux' style from bootswatch
   thematic::thematic_shiny()
   
-  #DATA PROCESSING - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  #DATA PROCESSING FUNCTIONS - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   
   #Filter with CPM normalization via DESeq2
   filter1 <- function(verse_counts,variance,nz) {
@@ -277,7 +272,7 @@ server<-function(input,output,session){
     return(v)
   }
   
-  #normalization function for running DESeq2
+  #normalization function 
   deseq_normalize <- function(count_data) {
     cm<-as.matrix(count_data)
     des<-DESeqDataSetFromMatrix(countData = cm,
@@ -426,12 +421,13 @@ server<-function(input,output,session){
   #outputs the summary of the metadata table created in the metainfo() function
   output$meta<- renderTable({
    metadata<-meta_data()
-   me<-tibble('Column'=colnames(metadata), 'Type'=lapply(metadata,class))#,
-            #  'Distinct Values'=lapply(metadata,function(x){paste(unique(x),collapse=', ')}))
-   #########
-   me<-mutate(me, 'Distinct Values/Mean (SD)'= case_when(Type!='numeric' ~ paste(unique(metadata$Column),collapse=', '),
-                                                       Type=='numeric' ~ paste0(mean(metadata$Column), '(',sd(metadata$Column),')')))
-   #########
+   me<-tibble('Column'=colnames(metadata), 'Type'=sapply(metadata,class))#,
+   distfunc<-function(x){
+     case_when(x[['Type']]!='numeric' ~ paste(unique(metadata[[x[['Column']]]]),collapse=', '),
+               x[['Type']]=='numeric' ~ paste0(mean(metadata[[x[['Column']]]]), ' (',sd(metadata[[x[['Column']]]]),')'))
+   }
+   dsv<-apply(me,1,distfunc)
+   me<-mutate(me, 'Distinct Values/Mean (SD)'= dsv)
    return(me)
    #I add this to add some minor styling to the UI table
   },width = "100%",bordered=TRUE,hover=TRUE)
@@ -517,7 +513,7 @@ server<-function(input,output,session){
     heatmap.2(int_matrix,col = pal,density.info='none',scale='none',trace='none',keysize=1,key.xlab='Log10 Read Counts')
   })
   
-  #Output PCA plot - - - - - - - - - -  make compatible
+  #Output PCA plot - - - - - - - - - -
   #runs PCA, then principal components are used for graphing
   output$pca<- renderPlot({
     req(isTruthy(input$file1) || isTruthy(input$file2) || isTruthy(input$file3) || isTruthy(input$file4))
@@ -528,10 +524,9 @@ server<-function(input,output,session){
                     Variance=pca$sdev**2,vex=Variance/sum(Variance)*100)
     xv<-as.integer(str_sub(input$PCX,start=3))
     yv<-as.integer(str_sub(input$PCY,start=3))
-   # val<-as.character(meta_data()[input$GB])
     t<-as_tibble(pca$x)%>%mutate(cat=as.character(meta_data()[[input$GB]]))
     ggplot(t,aes(x=!!sym(input$PCX),y=!!sym(input$PCY),color=cat))+
-      #labelss show the percent variance for each PC being graphed
+      #labels show the percent variance for each PC being graphed
       geom_point()+labs(title='PCA',x=paste0(input$PCX,' ',as.character(round(pca_var$vex[xv])),'% variance'),
                                    y=paste0(input$PCY,' ',as.character(round(pca_var$vex[yv])),'% variance'),
                         color=input$GB)+
@@ -585,7 +580,7 @@ server<-function(input,output,session){
   
   output$con<-renderUI({
     req(isTruthy(input$meta1) || isTruthy(input$meta2) || isTruthy(input$meta3) || isTruthy(input$meta4))
-    selectInput('contrast',p('SELECT CONTRAST',style='color:white; text-align:center'),choices=colnames(meta_data()))
+    selectInput('contrast',p('SELECT CONTRAST',style='color:white; text-align:center'),choices=colnames(meta_data()[,-1]))
   })
   
   output$vs<-renderUI({
@@ -629,19 +624,17 @@ server<-function(input,output,session){
      })
   #Output for volcano plot 
   output$volcano <- renderPlot({
-    #input$button
-    #Isolate function makes it so that the code will not run until the button is clicked
-    #isolate({
       volcano_plot(DE(),input$slider,input$color1,input$color2, input$color3)
-    #})
   })
   
+  #Function to order DESeq2 results bu padj value
   best<-function(dat){
     ret<-data.frame(dat)%>%rownames_to_column(var='gene')
     ret<-ret%>%filter(abs(log2FoldChange)>input$slider)
     return(ret[order(ret$padj),])
   }
   
+  #Outputs top 10 DE genes by padj value
   output$topg<-renderUI({
     bd<-head(best(DE()),10)
     return(radioButtons('tg',p('TOP 10 DIFFERENTIALLY EXPRESSED GENES',style='color:white; text-align:center'),choices=bd$gene))
