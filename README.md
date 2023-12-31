@@ -3,7 +3,7 @@
  
 You can find the app hosted here: https://jacksonfaulx.shinyapps.io/rnaseqapp/ 
 
-The app is still being actively worked on and I am looking to add new features regularly. It currently allows you to upload a RNAseq raw counts file as well as a meta data file, formatted as seen below
+The app is still being actively worked on and I am looking to add new features regularly. It currently allows you to upload a RNAseq raw counts file as well as a meta data file, formatted as seen below. Both files can be .csv or .tsv
 
 
 Counts file: Needs to have gene IDs as row names and samples as columns, counts data should be non-normalized and non-filtered
