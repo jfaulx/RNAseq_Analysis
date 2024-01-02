@@ -22,6 +22,7 @@ library(readr)
 library(gplots)
 library(shinyjs)
 library(rsconnect)
+library(biomaRt)
 
 css<-'#gc+div div a {color: black;}'
 ui<-fluidPage(
@@ -107,8 +108,7 @@ ui<-fluidPage(
           sliderInput('vslide',min=0,max=100,
                       label=p('MINIMUM PERCENTILE OF VARIANCE',style='color:white; text-align:center'),
                       value=50,step=1),
-          sliderInput('nzslide',min=0,max=9,label=p('MINIMUM NON-ZERO SAMPLES',style='color:white; text-align:center'),
-                      value=5,step=1)),
+          uiOutput('nonz')),
         mainPanel(
           tabsetPanel(id='ct',
             tabPanel('FILTER INFO',
@@ -183,7 +183,7 @@ ui<-fluidPage(
           conditionalPanel(condition="input.det=='RESULTS'",
             h2('Results Table',style='color:white; text-align:center'),
             p('A sortable and searchable table containing the results of a differential expression analysis performed on the given
-               counts matrix, comparing gene expression between adult (Ad) and neonatal (P) mouse myocytes')
+               counts matrix, comparing gene expression between the two groups of samples specified below')
                           ),
           conditionalPanel(condition="input.det=='VOLCANO PLOT'",
             h2('Volcano Plot',style='color:white; text-align:center'),
@@ -215,8 +215,14 @@ ui<-fluidPage(
                   withSpinner(plotOutput('volcano'),type=8,color='white'),
                   br(),
                   fluidRow(
-                    column(width=6,offset=3,
+                    column(width=6,
                       withSpinner(uiOutput('topg'),type=8,color='white')
+                                ),
+                    column(width=6,
+                      h3('HIGHLIGHTED GENE:',style='color:white; text-align:center'),     
+                      withSpinner(uiOutput('gid'),type=8,color='white'),
+                      h4('DESCRIPTION:',style='color:white; text-align:center'),
+                      withSpinner(uiOutput('description'),type=8,color='white')
                                 )
                               )
                             )
@@ -259,7 +265,8 @@ server<-function(input,output,session){
   filter1 <- function(verse_counts,variance,nz) {
     verse_counts1<-data.frame(verse_counts)%>%column_to_rownames(var='gene')
     vari<-apply(verse_counts1,1,var)
-    v<-verse_counts1 %>% filter(vari>quantile(vari,na.rm=TRUE,probs=(variance/100)),rowSums(verse_counts1>0)>nz)
+    v<-verse_counts1 %>% dplyr::filter(vari>quantile(vari,na.rm=TRUE,probs=(variance/100)))
+    v<-v%>%dplyr::filter(rowSums(.>0)>nz)
     v1<-deseq_normalize(v)
     return(v1)
   }
@@ -268,7 +275,8 @@ server<-function(input,output,session){
   filternn <- function(verse_counts,variance,nz) {
     verse_counts1<-data.frame(verse_counts)%>%column_to_rownames(var='gene')
     vari<-apply(verse_counts1,1,var)
-    v<-verse_counts1 %>% filter(vari>quantile(vari,na.rm=TRUE,probs=(variance/100)),rowSums(verse_counts1>0)>nz)
+    v<-verse_counts1 %>% dplyr::filter(vari>quantile(vari,na.rm=TRUE,probs=(variance/100)))
+    v<-v%>%dplyr::filter(rowSums(.>0)>nz)
     return(v)
   }
   
@@ -473,6 +481,12 @@ server<-function(input,output,session){
     )
     })
   
+  output$nonz<-renderUI({
+    req(isTruthy(input$file1) || isTruthy(input$file2) || isTruthy(input$file3) || isTruthy(input$file4))
+    sliderInput('nzslide',min=0,max=length(load_data()),label=p('MINIMUM NON-ZERO SAMPLES',style='color:white; text-align:center'),
+                value=5,step=1)
+  })
+  
   #PLOTS - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   
   #output plot of median count vs variance, colored by passing/failing the filter
@@ -539,7 +553,7 @@ server<-function(input,output,session){
     s<-as.matrix(filtered())
     expr_mat<-as.data.frame(t(s))
     pca<-prcomp(expr_mat,center=TRUE,scale=FALSE)
-    bee<-as_tibble(pca$x) %>% select(1:input$pcs)%>%
+    bee<-as_tibble(pca$x) %>% dplyr::select(1:input$pcs)%>%
       pivot_longer(everything(),names_to="PC",values_to="projection") %>%
       mutate(PC=forcats::fct_relevel(PC,str_c("PC",1:input$pcs))) %>%
       ggplot(aes(x=PC,y=projection,color=PC)) +
@@ -594,7 +608,9 @@ server<-function(input,output,session){
   
   #function for creating a volcano plot
   volcano_plot <-function(dataf, slider, color1, color2, color3) {
-    filt<-dataf%>%rownames_to_column(var='gene')%>%filter(gene==input$tg)
+    filt<-dataf%>%rownames_to_column(var='gene')
+    filt$gene<-gsub("\\..*","",filt$gene)
+    filt<-filt%>%dplyr::filter(gene==input$tg)
     vp<-ggplot(dataf)+geom_point(aes(x=dataf$log2FoldChange,y=log10(dataf$padj),color=abs(dataf$log2FoldChange)>slider,fill=NA))+
       scale_color_manual(values=c('FALSE'=color1,'TRUE'=color2))+
       labs(title='Volcano Plot',x='Log2 Fold Change',y='P-Adjusted',color=paste('Log2FC >',slider))+
@@ -620,7 +636,6 @@ server<-function(input,output,session){
                                  fixedColumns = TRUE, autoWidth = TRUE,
                                  ordering = TRUE, dom = 'Bfrtip'))
       })
- 
      })
   #Output for volcano plot 
   output$volcano <- renderPlot({
@@ -631,15 +646,43 @@ server<-function(input,output,session){
   best<-function(dat){
     ret<-data.frame(dat)%>%rownames_to_column(var='gene')
     ret<-ret%>%filter(abs(log2FoldChange)>input$slider)
+    ret$gene<-gsub("\\..*","",ret$gene)
     return(ret[order(ret$padj),])
   }
   
   #Outputs top 10 DE genes by padj value
-  output$topg<-renderUI({
-    bd<-head(best(DE()),10)
-    return(radioButtons('tg',p('TOP 10 DIFFERENTIALLY EXPRESSED GENES',style='color:white; text-align:center'),choices=bd$gene))
+   output$topg<-renderUI({
+     bd<-head(best(DE()),10)
+     return(radioButtons('tg',h3('TOP 10 DIFFERENTIALLY EXPRESSED GENES',style='color:white; text-align:center'),choices=bd$gene))
+   })
+   
+  #function to run biomart and retrieve gene info
+   gi<-function(data){
+     bg<-best(data)
+     ens<-bg$gene
+     if (substr(ens[1],1,7)=='ENSMUSG'){
+       mart<-useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+       ids<-getBM(attributes = c("ensembl_gene_id", "mgi_symbol",'mgi_description'), values = ens, mart = mart)
+     }
+     if (substr(ens[1],1,4)=='ENSG'){
+       mart<-useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+       ids<-getBM(attributes = c("ensembl_gene_id", "hgnc_symbol", 'description'), values = ens, mart = mart)
+     }
+     bm<-left_join(bg,ids,by=join_by(gene==ensembl_gene_id))
+     bms<-bm%>%dplyr::filter(gene==input$tg)
+     return(bms)
+   }
+   
+   #UI outputs for gene name and description
+   output$gid<-renderUI({
+     g<-gi(DE())
+     h4(g[,8],style='color:grey; text-align:center')
+   })
+   
+  output$description<-renderUI({
+    g<-gi(DE())
+    h4(g[,9],style='color:grey; text-align:center')
   })
-
 
 #INDIVIDUAL GENE EXPRESSION TAB - - - - - - - - - - - - - - - - - - - - - - - - -
 
